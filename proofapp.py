@@ -22,18 +22,18 @@ def check_password():
         # LANDING PAGE UI
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.markdown("<br><br>", unsafe_allow_view_ Wood=True)
-            st.image("https://cdn-icons-png.flaticon.com/512/6165/6165577.png", width=100)
-            st.title("Financial Operations Portal")
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            # Using a generic financial icon
+            st.markdown("## 🔐 Corporate Financial Portal")
             st.markdown("""
                 ### Welcome back! 
                 Please enter your credentials to access the **Account Statement Reconciler**. 
                 This tool is restricted to authorized personnel only.
                 
                 ---
-                **Need Help?** Contact the Finance IT department if you've forgotten your access key.
+                **Note:** All processing is done in-memory. Your data is not stored on our servers.
             """)
-            st.text_input("Access Key", type="password", on_change=password_entered, key="password", help="Enter the secret key provided by your manager.")
+            st.text_input("Access Key", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -69,24 +69,32 @@ def extract_match_key(row):
 if check_password():
     # Sidebar Info
     with st.sidebar:
-        st.header("Help & Instructions")
-        st.markdown("""
-        **File Requirements:**
-        * Must be an `.xlsx` file.
-        * Columns needed: `Date`, `Reference`, `Description`, `Value`, `Deposit`, `Withdrawal`, `Balance`.
+        st.header("🛠️ Operations")
+        if st.button("🔄 Reset App & Clear Data"):
+            st.rerun()
+            
+        st.markdown("---")
+        st.header("❓ Help & Troubleshooting")
+        st.info("""
+        **1. Error: Missing Columns**
+        Ensure headers are: Date, Reference, Description, Value, Deposit, Withdrawal, Balance.
         
-        **Common Errors:**
-        * Date format issues.
-        * Missing column headers.
+        **2. Error: Date Format**
+        Excel dates must be in a 'Date' format, not 'General' or 'Text'.
+        
+        **3. How it matches:**
+        It looks for 8+ digit IDs first, then moves to text-pattern matching for reversals that net to zero.
         """)
-        if st.button("Logout"):
+        
+        if st.button("🚪 Logout"):
             st.session_state["password_correct"] = False
             st.rerun()
 
     st.title("📊 Account Statement Reconciler")
     st.markdown("Automate your matching process with smart reversal detection.")
 
-    uploaded_file = st.file_uploader("Drop your GL/Account Statement file here", type="xlsx")
+    # Using a key on file_uploader allows us to reset it more easily if needed
+    uploaded_file = st.file_uploader("Drop your GL/Account Statement file here", type="xlsx", key="file_input")
 
     if uploaded_file:
         try:
@@ -96,7 +104,7 @@ if check_password():
             if not all(col in df.columns for col in required_cols):
                 st.error(f"⚠️ Column Mismatch! The file must have: {', '.join(required_cols)}")
             else:
-                # 2. Reconcile Process
+                # Reconcile Process
                 balance_rows = df[df['Deposit'].isna() & df['Withdrawal'].isna()]
                 if balance_rows.empty:
                     df_transactions, df_ob, df_cb = df.copy(), pd.DataFrame(), pd.DataFrame()
@@ -119,11 +127,11 @@ if check_password():
                 df_matched = df_transactions[df_transactions['Match_Key'].isin(matched_keys)].copy()
                 df_unmatched = df_transactions[~df_transactions['Match_Key'].isin(matched_keys)].copy()
 
-                # Dashboard
-                st.subheader("Process Summary")
+                # Dashboard Summary
+                st.markdown("---")
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Rows Processed", len(df_transactions))
-                m2.metric("Matches Found", len(df_matched))
+                m2.metric("Matched (Netted)", len(df_matched))
                 m3.metric("Unmatched items", len(df_unmatched))
 
                 c1, c2 = st.columns(2)
@@ -131,16 +139,17 @@ if check_password():
                     fig_pie = go.Figure(data=[go.Pie(labels=['Matched', 'Unmatched'], 
                                                      values=[len(df_matched), len(df_unmatched)], 
                                                      hole=.4, marker_colors=['#00D1B2', '#FF3860'])])
+                    fig_pie.update_layout(title="Volume Breakdown")
                     st.plotly_chart(fig_pie, use_container_width=True)
                 with c2:
                     unmatched_sum = df_unmatched['Amount'].sum()
                     fig_ind = go.Figure(go.Indicator(mode="number+delta", value=unmatched_sum,
                                                      number={'prefix': "$", 'valueformat': ",.2f"},
-                                                     title={"text": "Net Exposure"},
+                                                     title={"text": "Total Net Exposure (Unmatched)"},
                                                      delta={'reference': 0}))
                     st.plotly_chart(fig_ind, use_container_width=True)
 
-                # Export
+                # Export Assembly
                 final_cols = ['Date', 'Reference', 'Description', 'Value', 'Deposit', 'Withdrawal', 'Amount', 'Balance']
                 df_unmatched_out = pd.concat([df_ob, df_unmatched.drop(columns=['Match_Key', 'Net_Value', 'Match_Key_Ref', 'Match_Key_Text']), df_cb])[final_cols]
                 df_matched_out = df_matched.sort_values(by='Match_Key').drop(columns=['Match_Key', 'Net_Value', 'Match_Key_Ref', 'Match_Key_Text'])[final_cols]
@@ -150,14 +159,17 @@ if check_password():
                     df_unmatched_out.to_excel(writer, sheet_name='Unmatched Statement', index=False)
                     df_matched_out.to_excel(writer, sheet_name='Matched Entries', index=False)
                     
-                st.download_button(label="📥 Download Reconciled Excel", data=output.getvalue(), 
+                    # Basic Formatting
+                    workbook = writer.book
+                    num_fmt = workbook.add_format({'num_format': '#,##0.00'})
+                    for sheet_name in writer.sheets:
+                        writer.sheets[sheet_name].set_column('D:H', 15, num_fmt)
+
+                st.markdown("### 📥 Ready for Download")
+                st.download_button(label="Download Reconciled Report", data=output.getvalue(), 
                                    file_name="Reconciled_Report.xlsx", 
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    type="primary")
 
         except Exception as e:
-            st.error(f"An error occurred: {e}")
-
-
-
-
+            st.error(f"❌ Error processing file: {e}")
