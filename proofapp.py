@@ -5,7 +5,7 @@ import io
 import plotly.graph_objects as go
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Secure Account Reconciler", page_icon="🔒", layout="wide")
+st.set_page_config(page_title="Financial Reconciler | Secure Portal", page_icon="🔐", layout="wide")
 
 # --- Authentication Logic ---
 def password_entered():
@@ -17,17 +17,33 @@ def password_entered():
         st.session_state["password_correct"] = False
 
 def check_password():
-    """Returns True if the user had the correct password."""
+    """Displays a styled login screen."""
     if "password_correct" not in st.session_state:
-        st.text_input("Enter Access Password", type="password", on_change=password_entered, key="password")
+        # LANDING PAGE UI
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("<br><br>", unsafe_allow_view_ Wood=True)
+            st.image("https://cdn-icons-png.flaticon.com/512/6165/6165577.png", width=100)
+            st.title("Financial Operations Portal")
+            st.markdown("""
+                ### Welcome back! 
+                Please enter your credentials to access the **Account Statement Reconciler**. 
+                This tool is restricted to authorized personnel only.
+                
+                ---
+                **Need Help?** Contact the Finance IT department if you've forgotten your access key.
+            """)
+            st.text_input("Access Key", type="password", on_change=password_entered, key="password", help="Enter the secret key provided by your manager.")
         return False
     elif not st.session_state["password_correct"]:
-        st.text_input("Enter Access Password", type="password", on_change=password_entered, key="password")
-        st.error("❌ Password incorrect.")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.error("🔒 Access Denied. The key you entered is incorrect.")
+            st.text_input("Try Again", type="password", on_change=password_entered, key="password")
         return False
     return True
 
-# --- Reconciler Logic Functions ---
+# --- Logic Functions ---
 def extract_numeric_key(description):
     if pd.isna(description): return None
     match = re.search(r'\d{8,}', str(description))
@@ -49,21 +65,36 @@ def extract_match_key(row):
         return f"{text_key}_{round(abs(row['Net_Value']), 2)}"
     return f"NO_KEY_VALUE_{round(row['Net_Value'], 2)}"
 
-# --- Main App Body ---
+# --- Authenticated App Content ---
 if check_password():
-    st.title("📊 Account Statement Reconciler")
-    st.info("Upload your Excel file to automatically pair reversals and identify unmatched transactions.")
+    # Sidebar Info
+    with st.sidebar:
+        st.header("Help & Instructions")
+        st.markdown("""
+        **File Requirements:**
+        * Must be an `.xlsx` file.
+        * Columns needed: `Date`, `Reference`, `Description`, `Value`, `Deposit`, `Withdrawal`, `Balance`.
+        
+        **Common Errors:**
+        * Date format issues.
+        * Missing column headers.
+        """)
+        if st.button("Logout"):
+            st.session_state["password_correct"] = False
+            st.rerun()
 
-    uploaded_file = st.file_uploader("Upload 'GL/Account Statement'", type="xlsx")
+    st.title("📊 Account Statement Reconciler")
+    st.markdown("Automate your matching process with smart reversal detection.")
+
+    uploaded_file = st.file_uploader("Drop your GL/Account Statement file here", type="xlsx")
 
     if uploaded_file:
         try:
-            # 1. Load Data
             df = pd.read_excel(uploaded_file, sheet_name=0, parse_dates=['Date'], dtype={'Description': str})
             required_cols = ['Date', 'Reference', 'Description', 'Value', 'Deposit', 'Withdrawal', 'Balance']
             
             if not all(col in df.columns for col in required_cols):
-                st.error(f"Missing columns: {', '.join(required_cols)}")
+                st.error(f"⚠️ Column Mismatch! The file must have: {', '.join(required_cols)}")
             else:
                 # 2. Reconcile Process
                 balance_rows = df[df['Deposit'].isna() & df['Withdrawal'].isna()]
@@ -88,34 +119,28 @@ if check_password():
                 df_matched = df_transactions[df_transactions['Match_Key'].isin(matched_keys)].copy()
                 df_unmatched = df_transactions[~df_transactions['Match_Key'].isin(matched_keys)].copy()
 
-                # 3. Dashboard Metrics
+                # Dashboard
+                st.subheader("Process Summary")
                 m1, m2, m3 = st.columns(3)
-                m1.metric("Total Rows", len(df_transactions))
-                m2.metric("Matched (Zero Net)", len(df_matched), delta_color="normal")
-                m3.metric("Unmatched Items", len(df_unmatched), delta="- " + str(len(df_unmatched)), delta_color="inverse")
+                m1.metric("Rows Processed", len(df_transactions))
+                m2.metric("Matches Found", len(df_matched))
+                m3.metric("Unmatched items", len(df_unmatched))
 
-                # 4. Charts
                 c1, c2 = st.columns(2)
                 with c1:
                     fig_pie = go.Figure(data=[go.Pie(labels=['Matched', 'Unmatched'], 
                                                      values=[len(df_matched), len(df_unmatched)], 
-                                                     hole=.4, marker_colors=['#27ae60', '#c0392b'])])
-                    fig_pie.update_layout(title="Volume Breakdown")
+                                                     hole=.4, marker_colors=['#00D1B2', '#FF3860'])])
                     st.plotly_chart(fig_pie, use_container_width=True)
-
                 with c2:
                     unmatched_sum = df_unmatched['Amount'].sum()
                     fig_ind = go.Figure(go.Indicator(mode="number+delta", value=unmatched_sum,
                                                      number={'prefix': "$", 'valueformat': ",.2f"},
-                                                     title={"text": "Total Unmatched Exposure"},
+                                                     title={"text": "Net Exposure"},
                                                      delta={'reference': 0}))
                     st.plotly_chart(fig_ind, use_container_width=True)
 
-                # 5. Preview & Export
-                with st.expander("🔍 View Unmatched Transactions"):
-                    st.dataframe(df_unmatched.drop(columns=['Match_Key', 'Net_Value', 'Match_Key_Ref', 'Match_Key_Text']), use_container_width=True)
-
-                # Generate Excel
+                # Export
                 final_cols = ['Date', 'Reference', 'Description', 'Value', 'Deposit', 'Withdrawal', 'Amount', 'Balance']
                 df_unmatched_out = pd.concat([df_ob, df_unmatched.drop(columns=['Match_Key', 'Net_Value', 'Match_Key_Ref', 'Match_Key_Text']), df_cb])[final_cols]
                 df_matched_out = df_matched.sort_values(by='Match_Key').drop(columns=['Match_Key', 'Net_Value', 'Match_Key_Ref', 'Match_Key_Text'])[final_cols]
@@ -125,18 +150,10 @@ if check_password():
                     df_unmatched_out.to_excel(writer, sheet_name='Unmatched Statement', index=False)
                     df_matched_out.to_excel(writer, sheet_name='Matched Entries', index=False)
                     
-                    workbook = writer.book
-                    cur_fmt = workbook.add_format({'num_format': '#,##0.00'})
-                    date_fmt = workbook.add_format({'num_format': 'dd/mm/yyyy'})
-                    
-                    for sheet in writer.sheets.values():
-                        sheet.set_column('A:A', 12, date_fmt)
-                        sheet.set_column('D:H', 15, cur_fmt)
-
                 st.download_button(label="📥 Download Reconciled Excel", data=output.getvalue(), 
                                    file_name="Reconciled_Report.xlsx", 
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    type="primary")
 
         except Exception as e:
-            st.error(f"Error processing file: {e}")
+            st.error(f"An error occurred: {e}")
