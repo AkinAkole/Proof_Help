@@ -22,7 +22,7 @@ def check_password():
         # LANDING PAGE UI
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.markdown("<br><br>" unsafe_allow_view_ Wood=True)
+            st.markdown("<br><br>", unsafe_allow_view Wood=True)
             st.image("https://cdn-icons-png.flaticon.com/512/6165/6165577.png", width=100)
             st.title("Financial Operations Portal")
             st.markdown("""
@@ -157,5 +157,6 @@ if check_password():
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
+
 
 
