@@ -1,9 +1,11 @@
-import streamlit as st
-import pandas as pd
-import re
-import io
-import plotly.graph_objects as go
-
+def password_entered():
+    """Checks whether a password entered by the user is correct."""
+    # This looks for 'access_password' in your Streamlit Cloud settings
+    if st.session_state["password"] == st.secrets["access_password"]:
+        st.session_state["password_correct"] = True
+        del st.session_state["password"] 
+    else:
+        st.session_state["password_correct"] = False
 # --- Page Configuration ---
 st.set_page_config(page_title="Account Reconciler", page_icon="📊", layout="wide")
 
@@ -143,3 +145,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"⚠️ Error: {e}")
+
