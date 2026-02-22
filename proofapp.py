@@ -30,7 +30,7 @@ def extract_match_key(row):
 
 # --- Streamlit UI ---
 st.title("📊 Account Statement Reconciler")
-st.write("Upload your `GL/Statement of Account excel` file to identify matching reversals and unmatched entries.")
+st.write("Upload your `GL/Account Statement` file to identify matching reversals and unmatched entries.")
 
 uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
 
@@ -98,3 +98,4 @@ if uploaded_file:
     except Exception as e:
 
         st.error(f"An error occurred: {e}")
+
